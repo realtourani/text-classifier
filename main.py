@@ -16,7 +16,7 @@ if __name__ == "__main__":
     TOKEN = "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"
 
     inputs = sys.argv[1] if len(sys.argv) > 1 else input("Enter the text: ")
-    candidate_labels = ["racist", "xenophobic"]
+    candidate_labels = ["racist", "xenophobic"] # you can add more categories
 
     start_time = time.time()  # Record start time
 
