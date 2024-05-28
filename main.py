@@ -1,28 +1,50 @@
-import sys
-import requests
+import warnings
+import torch
+from transformers import AutoModelForSequenceClassification, AutoTokenizer
+import numpy as np
 import time
 
-def query_model(inputs, candidate_labels, model_url, token):
-    headers = {"Authorization": f"Bearer {token}"}
-    payload = {
-        "inputs": inputs,
-        "parameters": {"candidate_labels": candidate_labels}
+# Suppress FutureWarning
+warnings.filterwarnings("ignore", category=FutureWarning)
+
+# Set device
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+# Load model and tokenizer
+model = AutoModelForSequenceClassification.from_pretrained('./model/').to(device)
+tokenizer = AutoTokenizer.from_pretrained('bert-base-uncased')
+
+# Define the prediction function
+def get_prediction(text):
+    start_time = time.time()  # Start time
+    
+    # Tokenize input text
+    encoding = tokenizer(text, return_tensors="pt", padding="max_length", truncation=True, max_length=128)
+    encoding = {k: v.to(device) for k, v in encoding.items()}
+
+    # Get model outputs
+    with torch.no_grad():
+        outputs = model(**encoding)
+        logits = outputs.logits
+
+    # Calculate probabilities
+    probs = torch.nn.Sigmoid()(logits.squeeze().cpu()).numpy()
+    label = np.argmax(probs, axis=-1)
+
+    # Map label to class
+    result = {
+        'label': 'racist' if label == 1 else 'xenophobic',
+        'probability': probs[label]
     }
-    response = requests.post(model_url, headers=headers, json=payload)
-    return response.json()
 
-if __name__ == "__main__":
-    API_URL = "https://api-inference.huggingface.co/models/facebook/bart-large-mnli"
-    TOKEN = "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"
+    end_time = time.time()  # End time
+    response_time = end_time - start_time
 
-    inputs = sys.argv[1] if len(sys.argv) > 1 else input("Enter the text: ")
-    candidate_labels = ["racist", "xenophobic"] # you can add more categories
+    return result, response_time
 
-    start_time = time.time()  # Record start time
+# Get user input
+text = input("Enter text for prediction: ")
+prediction, response_time = get_prediction(text)
 
-    output = query_model(inputs, candidate_labels, API_URL, TOKEN)
-
-    elapsed_time = time.time() - start_time  # Calculate elapsed time
-    print(f"Elapsed time: {elapsed_time} seconds")
-
-    print(output['labels'][0])
+print(f"Prediction: {prediction}")
+print(f"Response time: {response_time:.4f} seconds")
